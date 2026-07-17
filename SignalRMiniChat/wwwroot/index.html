@@ -1,36 +1,179 @@
 ﻿<!DOCTYPE html>
 <html lang="tr">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>SignalR Mini Chat</title>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
 </head>
+
 <body>
 
     <h1>SignalR Mini Chat</h1>
 
-    <p id="connectionStatus">Bağlantı kuruluyor...</p>
+    <p id="connectionStatus">
+        Bağlantı kuruluyor...
+    </p>
+
+    <hr>
+
+    <label for="user">Kullanıcı adı:</label>
+
+    <input id="user"
+           type="text"
+           placeholder="Kullanıcı Adı">
+
+    <br><br>
+
+    <label for="room">Oda:</label>
+
+    <select id="room">
+        <option value="Room1">Room1</option>
+        <option value="Room2">Room2</option>
+    </select>
+
+    <button id="joinRoomButton" disabled>
+        Odaya Katıl
+    </button>
+
+    <p id="roomStatus">
+        Henüz bir odaya katılmadınız.
+    </p>
+
+    <hr>
+
+    <label for="message">Mesaj:</label>
+
+    <input id="message"
+           type="text"
+           placeholder="Mesaj">
+
+    <button id="sendButton">
+        Gönder
+    </button>
+
+    <hr>
+
+    <ul id="messages"></ul>
 
     <script>
         const connection = new signalR.HubConnectionBuilder()
             .withUrl("/chatHub")
             .build();
 
+        let currentRoom = null;
+
         connection.start()
             .then(function () {
                 document.getElementById("connectionStatus").textContent =
                     "SignalR bağlantısı kuruldu.";
+
+                document.getElementById("joinRoomButton").disabled = false;
             })
             .catch(function (error) {
-                console.error(error);
-
                 document.getElementById("connectionStatus").textContent =
-                    "SignalR bağlantısı kurulamadı.";
+                    "Bağlantı kurulamadı.";
+
+                console.error(error);
+            });
+
+        connection.on("ReceiveMessage", function (user, message) {
+            const li = document.createElement("li");
+
+            li.textContent = user + " : " + message;
+
+            document
+                .getElementById("messages")
+                .appendChild(li);
+        });
+
+        connection.on("ReceiveSystemMessage", function (message) {
+            const li = document.createElement("li");
+
+            li.textContent = "[Sistem] " + message;
+
+            document
+                .getElementById("messages")
+                .appendChild(li);
+        });
+
+        document
+            .getElementById("joinRoomButton")
+            .addEventListener("click", function () {
+                const user =
+                    document.getElementById("user").value;
+
+                const newRoom =
+                    document.getElementById("room").value;
+
+                if (user.trim() === "") {
+                    alert("Kullanıcı adı giriniz.");
+                    return;
+                }
+
+                if (currentRoom === newRoom) {
+                    alert("Zaten bu odadasınız.");
+                    return;
+                }
+
+                // Eski odaya ait mesajları, yeni odaya geçmeden önce temizliyoruz.
+                document.getElementById("messages").innerHTML = "";
+
+                connection.invoke(
+                    "JoinRoom",
+                    currentRoom,
+                    newRoom,
+                    user
+                )
+                    .then(function () {
+                        currentRoom = newRoom;
+
+                        document.getElementById("roomStatus").textContent =
+                            newRoom + " odasına katıldınız.";
+                    })
+                    .catch(function (error) {
+                        console.error("Odaya katılma hatası:", error);
+
+                        document.getElementById("roomStatus").textContent =
+                            "Odaya katılma işlemi başarısız oldu.";
+                    });
+            });
+
+        document
+            .getElementById("sendButton")
+            .addEventListener("click", function () {
+                const user =
+                    document.getElementById("user").value;
+
+                const message =
+                    document.getElementById("message").value;
+
+                if (currentRoom === null) {
+                    alert("Önce bir odaya katılmalısınız.");
+                    return;
+                }
+
+                if (message.trim() === "") {
+                    alert("Mesaj giriniz.");
+                    return;
+                }
+
+                connection.invoke(
+                    "SendMessage",
+                    currentRoom,
+                    user,
+                    message
+                )
+                    .then(function () {
+                        document.getElementById("message").value = "";
+                    })
+                    .catch(function (error) {
+                        console.error("Mesaj gönderme hatası:", error);
+                    });
             });
     </script>
 
 </body>
+
 </html>
